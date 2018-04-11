@@ -1,145 +1,133 @@
 import numpy as np
 from numpy.random import randint, random
 import matplotlib.pyplot as plt
-
-max_length = 15
-solution_type = np.zeros(max_length)
-
-initial_temperature = 100.0
-final_temperature = 0.2
-alpha = 0.99
-steps_per_chance = 100
-
-t = []
-e = []
-a = []
+from copy import deepcopy
 
 
-def tweak_solution(solution):
-    x = randint(max_length)
-    y = randint(max_length)
+class SimulatedAnnealing():
+    def __init__(self):
+        self.length = 8
+        self.initial_temperature = 100.0
+        self.final_temperature = 0.5
+        self.alpha = 0.99
+        self.steps_per_chance = 100
+        self.history_temperature = []
+        self.history_best_energy = []
+        self.history_accepted = []
 
-    while x == y:
-        y = randint(max_length)
+        self.current_solution = self.initialize_solution()
+        self.best_solution = self.initialize_solution()
+        self.working_solution = self.initialize_solution()
+        self.verbose = True
+        self.solution = False
 
-    solution[x], solution[y] = solution[y], solution[x]
-    return solution
+    def tweak_solution(self, solution):
+        x = randint(self.length)
+        y = randint(self.length)
 
+        while x == y:
+            y = randint(self.length)
 
-def initialize_solution(solution=None):
-    if solution is None:
-        solution = np.array(range(max_length))
+        solution['board'][x], solution['board'][y] = solution['board'][y], solution['board'][x]
+        solution['energy'] = self.compute_energy(solution)
+        return solution
 
-    for _ in range(max_length):
-        solution = tweak_solution(solution)
-    return solution
-    
+    def initialize_solution(self, solution=None):
+        if solution is None:
+            solution = {'board': np.array(range(self.length), dtype=int), 'energy': self.length * (self.length - 1)}
 
-def compute_energy(solution):
-    board = np.zeros((max_length, max_length))
+        #for _ in range(self.length):
+        #    solution = self.tweak_solution(solution)
+        return solution
 
-    dxs = np.array([-1, 1, -1, 1])
-    dys = np.array([-1, 1, 1, -1])
-    
-    for i in range(max_length):
-        board[i, solution[i]] = 1
+    def compute_energy(self, solution):
+        board = np.zeros((self.length, self.length))
 
-    conflicts = 0
+        dxs = np.array([-1, 1, -1, 1])
+        dys = np.array([-1, 1, 1, -1])
 
-    for i in range(max_length):
-        x = i
-        y = solution[i]
-        for dx, dy in zip(dxs, dys):
-            tempx = x
-            tempy = y
+        for i in range(self.length):
+            board[i, solution['board'][i]] = 1
 
-            while True:
-                tempx += dx
-                tempy += dy
-                if (tempx < 0) or (max_length <= tempx) or (0 > tempy) or (tempy >= max_length):
-                    break
-                if board[tempx, tempy] == 1:
-                    conflicts += 1
+        conflicts = 0
 
-    return conflicts
+        for i in range(self.length):
+            x = i
+            y = solution['board'][i]
+            for dx, dy in zip(dxs, dys):
+                tempx = x
+                tempy = y
 
+                while True:
+                    tempx += dx
+                    tempy += dy
+                    if (tempx < 0) or (self.length <= tempx) or (0 > tempy) or (tempy >= self.length):
+                        break
+                    if board[tempx, tempy] == 1:
+                        conflicts += 1
 
-def print_solution(solution):
-    board = np.zeros((max_length, max_length))
+        return conflicts
 
-    for i in range(max_length):
-        board[i, solution[i]] = 1
+    def print_solution(self):
+        board = np.zeros((self.length, self.length))
 
-    for string in board:
-        print(''.join(['. ' if not s else 'Q' for s in string]))
+        for i in range(self.length):
+            board[i, self.best_solution['board'][i]] = 1
 
+        for string in board:
+            print(''.join(['. ' if not s else 'Q' for s in string]))
 
-def main():
-    temperature = initial_temperature
+    def fit(self):
+        temperature = self.initial_temperature
 
-    sol = 0
+        while temperature > self.final_temperature:
+            accepted = 0
 
-    current = np.zeros(max_length, dtype=int)
-    working = np.zeros(max_length, dtype=int)
-    best = np.zeros(max_length, dtype=int)
-
-    current = initialize_solution()
-    current_energy = compute_energy(current)
-    best_energy = 100.0
-
-    working = current.copy()
-    working_energy = current_energy
-
-    while temperature > final_temperature:
-        accepted = 0
-
-        for steps in range(steps_per_chance):
-            use_new = 0
-
-            working = tweak_solution(working)
-            working_energy = compute_energy(working)
-
-            if working_energy <= current_energy:
-                use_new = 1
-            else:
-                test = random()
-                delta = working_energy - current_energy
-                calc = np.exp(-delta / temperature)
-                if calc > test:
-                    accepted += 1
-                    use_new = 1
-
-            if use_new:
+            for steps in range(self.steps_per_chance):
                 use_new = 0
-                current = working.copy()
-                current_energy = working_energy
 
-                if current_energy < best_energy:
-                    best = current.copy()
-                    best_energy = current_energy
-                    sol = 1
+                self.working_solution = self.tweak_solution(self.working_solution)
+                #self.working_solution['energy'] = self.compute_energy(self.working_solution)
+
+                if self.working_solution['energy'] <= self.current_solution['energy']:
+                    use_new = 1
                 else:
-                    working = current.copy()
-                    working_energy = current_energy
-        temperature *= alpha
-        print('{}, {}, {}'.format(temperature, best_energy, accepted))
-        t.append(temperature)
-        e.append(best_energy)
-        a.append(accepted)
-        print('Best energy = {}'.format(best_energy))
+                    test = random()
+                    delta = self.working_solution['energy'] - self.current_solution['energy']
+                    calc = np.exp(-delta / temperature)
+                    if calc > test:
+                        accepted += 1
+                        use_new = 1
 
-    if sol:
-        print_solution(best)
-    return best
+                if use_new:
+                    self.current_solution = deepcopy(self.working_solution)
+
+                    if self.current_solution['energy'] < self.best_solution['energy']:
+                        self.best_solution = deepcopy(self.current_solution)
+                        self.solution = True
+                else:
+                    self.working_solution = deepcopy(self.current_solution)
+            temperature *= self.alpha
+
+            self.history_accepted.append(accepted)
+            self.history_best_energy.append(self.best_solution['energy'])
+            self.history_temperature.append(temperature)
+
+            if self.verbose:
+                print('{}, {}, {}'.format(temperature, self.best_solution['energy'], accepted))
+
+    def plot(self):
+        plt.plot(self.history_temperature, label='Temperature')
+        plt.plot(self.history_accepted, label='Accepted')
+        plt.plot(self.history_best_energy, label='Best energy')
+        plt.legend(loc='best', frameon=True)
+        plt.xlim(0, len(self.history_accepted))
+        plt.show()
+
 
 if __name__ == "__main__":
-    print(main())
-    #energy = compute_energy(np.array([2, 0, 6, 4, 7, 1, 3, 5]))
-    #print(energy)
-    #solution = initialize_solution()
-    #print_solution(solution)
-    plt.plot(t, label='Temperature')
-    plt.plot(e, label='Best Energy')
-    plt.plot(a, label='Accepted')
-    plt.legend(loc='best', frameon=True)
-    plt.show()
+    sim = SimulatedAnnealing()
+    sim.fit()
+    print(sim.best_solution)
+    sim.print_solution()
+    sim.plot()
